@@ -1,14 +1,3 @@
-# 캡스톤 프로젝트: 관리자 페이지 및 QR 결제 시스템 소스코드
-
-## 💡 프로젝트 인수인계 (Project Overview)
-
-본 프로젝트는 캡스톤 디자인의 일환으로 개발된 관리자 웹페이지 및 결제 시스템의 핵심 소스코드 저장소입니다.
-
-**아키텍처:**
-Java Servlet 기반의 Monolithic(일체형) 구조이며, 프론트엔드(HTML/JS)는 백엔드(Java)를 RESTful API (JSON) 방식으로 호출하여 데이터를 비동기적으로 처리합니다.
-
----
-
 ## 🏗️ 파일 구조 및 역할 (Project File Tree)
 
 이 프로젝트는 이클립스 기반의 Maven/Servlet 구조로 구성되어 있으며, `src/main/java`가 백엔드를, `src/main/webapp`이 프론트엔드를 담당합니다.
