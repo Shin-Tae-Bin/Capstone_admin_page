@@ -21,7 +21,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 const token = await new Promise((resolve, reject) => {
                     if (typeof grecaptcha !== 'undefined') {
                         grecaptcha.ready(function() {
-                            grecaptcha.execute('6LdvwmMrAAAAAKdeVxifl0DblbAGGTXMtLA4ypfQ', {action: 'login'})
+                            grecaptcha.execute('', {action: 'login'})
                                 .then(resolve)
                                 .catch((err) => {
                                     console.error("reCAPTCHA Error:", err);
