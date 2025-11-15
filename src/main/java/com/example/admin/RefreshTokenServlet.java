@@ -25,7 +25,7 @@ public class RefreshTokenServlet extends HttpServlet {
     private static final long serialVersionUID = 1L;
 
     // LoginServlet과 똑같은 키여야 합니다! (32글자 이상)
-    private static final String JWT_SECRET_KEY = "JWT_secret_key_must_be_longer_than_32_bytes_very_secure!!";
+    private static final String JWT_SECRET_KEY = "";
 
     @Override
     protected void doPost(HttpServletRequest request, HttpServletResponse response) 
