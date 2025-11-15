@@ -1,0 +1,807 @@
+<script>
+  // ===== 식권 결제 내역 관련 모든 함수 =====
+
+  // [FIX] 이 뷰(식권 결제 내역)에서만 사용할 사용자 정보 캐시 변수
+  // 다른 뷰에 영향을 주지 않고 이름을 불러오기 위해 사용됩니다.
+  let __mealTicketViewUserCache = null;
+
+  const axisLabelPlugin = {
+    id: "axisLabelPlugin",
+    afterDraw: (chart) => {
+      const {
+        ctx,
+        chartArea,
+        scales: { x },
+      } = chart;
+      if (!chartArea) return;
+
+      ctx.save();
+      ctx.font = "12px Inter";
+      ctx.fillStyle = "#6B7280";
+
+      // Y-axis Label
+      ctx.textAlign = "left";
+      ctx.textBaseline = "top";
+      ctx.fillText("금액(원)", chartArea.left, 3);
+
+      // X-axis Label
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      const padding = 5;
+      ctx.fillText("날짜(일)", x.right + padding + 6, x.bottom - 10);
+
+      ctx.restore();
+    },
+  };
+
+  const paymentMethodColors = {
+    cash: "rgba(54, 162, 235, 0.7)",
+    qr: "rgba(153, 102, 255, 0.7)",
+    card: "rgba(255, 206, 86, 0.7)",
+  };
+  const restaurantColors = {
+    피오니: "rgba(255, 99, 132, 0.7)",
+    아질리아: "rgba(75, 192, 192, 0.7)",
+  };
+
+  window.getMealTicketTableConfig = function (tab) {
+    const fixedFirstColName = "날짜";
+    const fixedLastColName = "처리상태";
+    const fixedFirstColWidth = "12%";
+    const fixedLastColWidth = "13%";
+    let middleColumns = [];
+    let middleColgroupStyles = [];
+
+    switch (tab) {
+      case "all":
+        middleColumns = ["시간", "결제방법", "결제 금액", "식권 개수", "식당"];
+        middleColgroupStyles = ["10%", "13%", "15%", "12%", "15%"];
+        break;
+      case "qr":
+        middleColumns = [
+          "시간",
+          "이름",
+          "학번/사번",
+          "결제 금액",
+          "식권 개수",
+          "식당",
+        ];
+        middleColgroupStyles = ["15%", "14%", "13%", "13%", "8%", "12%"];
+        break;
+      case "card":
+        middleColumns = ["시간", "카드번호", "결제 금액", "식권 개수", "식당"];
+        middleColgroupStyles = ["15%", "25%", "15%", "8%", "12%"];
+        break;
+      case "cash":
+        middleColumns = ["시간", "결제 금액", "식권 개수", "식당"];
+        middleColgroupStyles = ["15%", "26%", "22%", "12%"];
+        break;
+      default:
+        middleColumns = ["시간", "결제방법", "결제 금액", "식권 개수", "식당"];
+        middleColgroupStyles = ["10%", "10%", "15%", "20%", "20%"];
+    }
+
+    const columns = [fixedFirstColName, ...middleColumns, fixedLastColName];
+    const colgroupStyles = [
+      fixedFirstColWidth,
+      ...middleColgroupStyles,
+      fixedLastColWidth,
+    ];
+
+    const headerRowHTML = `<tr>${columns
+      .map(
+        (col) =>
+          `<th class="py-3 px-4 uppercase font-semibold text-sm text-gray-600 text-center">${col}</th>`
+      )
+      .join("")}</tr>`;
+    const colgroupHTML = `<colgroup>${colgroupStyles
+      .map((style) => `<col style="width: ${style};">`)
+      .join("")}</colgroup>`;
+    return { headerRowHTML, colgroupHTML, columnOrder: columns };
+  };
+
+  window.populateMonthSelector = function (selectedMonth, allPurchases = []) {
+    const selector = document.getElementById("month-selector");
+    if (!selector) return;
+
+    const uniqueMonths = [
+      ...new Set(allPurchases.map((p) => p.date.substring(0, 7))),
+    ]
+      .sort()
+      .reverse();
+
+    if (uniqueMonths.length === 0) {
+      const now = new Date();
+      uniqueMonths.push(
+        `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`
+      );
+    }
+
+    selector.innerHTML = uniqueMonths
+      .map(
+        (month) =>
+          `<option value="${month}" ${
+            month === selectedMonth ? "selected" : ""
+          }>${month}</option>`
+      )
+      .join("");
+
+    if (!selectedMonth && uniqueMonths.length > 0) {
+      window.currentMealTicketMonth = uniqueMonths[0];
+      selector.value = window.currentMealTicketMonth;
+    } else if (selectedMonth) {
+      window.currentMealTicketMonth = selectedMonth;
+      selector.value = selectedMonth;
+    } else if (uniqueMonths.length > 0) {
+      window.currentMealTicketMonth = uniqueMonths[0];
+      selector.value = window.currentMealTicketMonth;
+    }
+  };
+
+  window.renderMealTicketPurchaseHistory = function (
+    activeTab = "all",
+    selectedRestaurant = "all",
+    selectedMonth = "",
+    currentPage = 1,
+    allPurchasesData = []
+  ) {
+    const contentContainer = document.getElementById("admin-content-container");
+    if (!contentContainer) return;
+
+    if (!selectedMonth) {
+      if (allPurchasesData.length > 0) {
+        const uniqueMonths = [
+          ...new Set(allPurchasesData.map((p) => p.date.substring(0, 7))),
+        ]
+          .sort()
+          .reverse();
+        selectedMonth =
+          uniqueMonths.length > 0
+            ? uniqueMonths[0]
+            : new Date().toISOString().substring(0, 7);
+      } else {
+        selectedMonth = new Date().toISOString().substring(0, 7);
+      }
+    }
+    window.currentMealTicketMonth = selectedMonth;
+
+    const tableConfig = getMealTicketTableConfig(activeTab);
+
+    let dynamicLineChartContainerHeight;
+    const pieChartContainerHeight = "h-56";
+
+    if (activeTab !== "all") {
+      dynamicLineChartContainerHeight = "h-72";
+    } else {
+      dynamicLineChartContainerHeight = "h-[29rem]";
+    }
+
+    contentContainer.innerHTML = `
+      <div class="bg-white p-6 rounded-lg shadow">
+          <div class="flex justify-between items-start mb-6 pb-4 border-b border-gray-200">
+              <div class="flex flex-col">
+                  <h2 class="text-2xl font-semibold text-gray-800 mb-4">식권 결제 내역</h2>
+                  <nav class="flex space-x-1" aria-label="Tabs">
+                      <button class="tab-button ${
+                        activeTab === "all" ? "active" : ""
+                      }" onclick="onMealTabClick('all')">전체</button>
+                      <button class="tab-button ${
+                        activeTab === "qr" ? "active" : ""
+                      }" onclick="onMealTabClick('qr')">QR</button>
+                      <button class="tab-button ${
+                        activeTab === "card" ? "active" : ""
+                      }" onclick="onMealTabClick('card')">카드</button>
+                      <button class="tab-button ${
+                        activeTab === "cash" ? "active" : ""
+                      }" onclick="onMealTabClick('cash')">현금</button>
+                  </nav>
+              </div>
+              <div class="inline-block bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  <div class="flex flex-wrap items-end gap-x-4 gap-y-4">
+                      <div>
+                          <label for="month-selector" class="block text-sm font-medium text-gray-700 mb-1.5">조회 월</label>
+                          <select id="month-selector" class="block w-auto h-8 pl-3 pr-10 text-sm border border-gray-300 border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500"></select>
+                      </div>
+                      <div>
+                          <label for="restaurant-filter" class="block text-sm font-medium text-gray-700 mb-1.5">식당 선택</label>
+                          <select id="restaurant-filter" class="block w-auto h-8 pl-3 pr-10 text-sm border border-gray-300 border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                              <option value="all" ${
+                                selectedRestaurant === "all" ? "selected" : ""
+                              }>전체 식당</option>
+                              <option value="아질리아" ${
+                                selectedRestaurant === "아질리아"
+                                  ? "selected"
+                                  : ""
+                              }>아질리아</option>
+                              <option value="피오니" ${
+                                selectedRestaurant === "피오니"
+                                  ? "selected"
+                                  : ""
+                              }>피오니</option>
+                          </select>
+                      </div>
+                  </div>
+              </div>
+          </div>
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+              <div class="bg-gray-50 p-4 rounded-lg shadow ${dynamicLineChartContainerHeight}">
+                  <h3 class="text-lg font-semibold text-gray-700 mb-2 text-center">일별 결제 금액 (${selectedMonth})</h3>
+                  <canvas id="dailySalesLineChartCanvas"></canvas>
+              </div>
+              <div class="space-y-4">
+                  ${
+                    activeTab === "all"
+                      ? `
+                  <div class="bg-gray-50 p-4 rounded-lg shadow ${pieChartContainerHeight} relative">
+                      <div id="paymentMethodsLegend" class="absolute top-2 left-2 text-xs space-y-1 z-10 bg-white bg-opacity-75 p-1 rounded"></div>
+                      <h3 class="text-lg font-semibold text-gray-700 text-center">결제 수단 비율</h3>
+                      <canvas id="paymentMethodsPieCanvas"></canvas>
+                  </div>`
+                      : ""
+                  }
+                  <div class="bg-gray-50 p-4 rounded-lg shadow ${
+                    activeTab === "all"
+                      ? pieChartContainerHeight
+                      : dynamicLineChartContainerHeight
+                  } relative">
+                      <div id="restaurantDistributionLegend" class="absolute top-2 left-2 text-xs space-y-1 z-10 bg-white bg-opacity-75 p-1 rounded"></div>
+                      <h3 class="text-lg font-semibold text-gray-700 text-center">식당별 결제 비율</h3>
+                      <canvas id="restaurantDistributionPieCanvas"></canvas>
+                  </div>
+              </div>
+          </div>
+          <div class="overflow-x-auto">
+              <h3 class="text-lg font-semibold text-gray-700 mb-2 mt-4">상세 내역</h3>
+              <table class="min-w-full bg-white table-fixed">
+                  ${tableConfig.colgroupHTML}
+                  <thead class="bg-gray-200">
+                      ${tableConfig.headerRowHTML}
+                  </thead>
+                  <tbody id="mealTicketTableBody" class="text-gray-700"></tbody>
+              </table>
+          </div>
+          <div id="mealTicketPaginationControls"></div>
+      </div>`;
+
+    populateMonthSelector(selectedMonth, allPurchasesData);
+
+    document
+      .getElementById("month-selector")
+      .addEventListener("change", (event) => {
+        const newMonth = event.target.value;
+        window.renderMealTicketPurchaseHistoryWithData(
+          activeTab,
+          document.getElementById("restaurant-filter")?.value || "all",
+          newMonth,
+          1
+        );
+      });
+
+    const restaurantFilterEl = document.getElementById("restaurant-filter");
+    if (restaurantFilterEl) {
+      restaurantFilterEl.addEventListener("change", (event) => {
+        window.renderMealTicketPurchaseHistoryWithData(
+          activeTab,
+          event.target.value,
+          window.currentMealTicketMonth,
+          1
+        );
+      });
+    }
+
+    updateMealTicketData(
+      activeTab,
+      selectedRestaurant,
+      selectedMonth,
+      currentPage,
+      allPurchasesData
+    );
+  };
+
+  window.renderMealTicketPurchaseHistoryWithData = async function (
+    activeTab = "all",
+    selectedRestaurant = "all",
+    selectedMonth = "",
+    currentPage = 1,
+    data = null
+  ) {
+    let dataToRender = data;
+    if (!dataToRender) {
+      try {
+        dataToRender = await window.fetchMealTicketPayments(activeTab);
+      } catch (e) {
+        console.error("Failed to fetch meal ticket payments:", e);
+        dataToRender = [];
+      }
+    }
+    renderMealTicketPurchaseHistory(
+      activeTab,
+      selectedRestaurant,
+      selectedMonth,
+      currentPage,
+      dataToRender
+    );
+  };
+
+  // [FIX] 이름을 매핑하는 로직을 수정합니다.
+  window.updateMealTicketData = async function (
+    // async로 변경
+    activeTab,
+    restaurantFilter,
+    selectedMonth,
+    currentPage = 1,
+    allPurchases = []
+  ) {
+    // [FIX] 이 뷰가 활성화된 동안 사용자 정보를 딱 한 번만 불러오도록 수정
+    if (__mealTicketViewUserCache === null) {
+      try {
+        console.log("Fetching user data for name mapping...");
+        __mealTicketViewUserCache = await window.fetchPointTransactionData();
+      } catch (e) {
+        console.error("Failed to fetch user data for name mapping:", e);
+        __mealTicketViewUserCache = []; // 에러 시 빈 배열로 초기화하여 재시도 방지
+      }
+    }
+
+    // [FIX] 전역 변수 대신, 이 뷰에서 직접 불러온 사용자 정보(__mealTicketViewUserCache)를 사용
+    if (__mealTicketViewUserCache && __mealTicketViewUserCache.length > 0) {
+      const userMap = new Map(
+        __mealTicketViewUserCache.map((user) => [user.id.toString(), user.name])
+      );
+      allPurchases.forEach((purchase) => {
+        if (purchase.userId && !purchase.name) {
+          purchase.name = userMap.get(purchase.userId.toString());
+        }
+      });
+    }
+
+    // --- 여기부터는 기존 코드와 동일합니다 ---
+
+    let monthFilteredData = allPurchases.filter((p) =>
+      p.date.startsWith(selectedMonth)
+    );
+
+    let tabFilteredData = monthFilteredData;
+    if (activeTab !== "all") {
+      tabFilteredData = monthFilteredData.filter(
+        (p) => p.paymentMethod === activeTab
+      );
+    }
+
+    const dataForRestaurantPie = tabFilteredData;
+
+    let lineChartAndTableDataSource = tabFilteredData;
+    if (restaurantFilter !== "all") {
+      lineChartAndTableDataSource = tabFilteredData.filter(
+        (p) => p.restaurant === restaurantFilter
+      );
+    }
+
+    // [수정] 결제 수단 비율 원그래프가 식당 필터에 따라 올바르게 업데이트되도록 데이터 소스를 수정합니다.
+    // 기존에는 월 필터만 적용된 데이터를 사용하고 있어 식당 필터가 반영되지 않았습니다.
+    // 'lineChartAndTableDataSource'는 월, 탭, 식당 필터가 모두 적용된 데이터이므로,
+    // '전체' 탭에서 이 데이터를 사용하면 식당 필터가 적용된 결제 수단 비율을 올바르게 보여줄 수 있습니다.
+    const dataForPaymentPie = lineChartAndTableDataSource;
+
+    const dailySales = lineChartAndTableDataSource.reduce((acc, curr) => {
+      const day = curr.date.split("-")[2];
+      acc[`${selectedMonth}-${day.padStart(2, "0")}`] =
+        (acc[`${selectedMonth}-${day.padStart(2, "0")}`] || 0) + curr.amount;
+      return acc;
+    }, {});
+
+    const orderedDates = Object.keys(dailySales).sort();
+    const lineChartLabels = orderedDates.map((date) =>
+      parseInt(date.split("-")[2], 10)
+    );
+    const lineChartDataPoints = orderedDates.map((date) => dailySales[[date]]);
+
+    const lineConfig = {
+      type: "line",
+      data: {
+        labels: lineChartLabels,
+        datasets: [
+          {
+            label: "일별 결제액 ",
+            data: lineChartDataPoints,
+            borderColor: "rgb(100, 149, 237)",
+            borderWidth: 1,
+            pointBackgroundColor: "rgb(100, 149, 237)",
+            pointBorderColor: "rgb(100, 149, 237)",
+            pointRadius: 4,
+            pointHoverRadius: 6,
+            tension: 0.1,
+            fill: false,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          y: { title: { display: false } },
+          x: { title: { display: false } },
+        },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            displayColors: false,
+            callbacks: {
+              title: function (tooltipItems) {
+                if (tooltipItems.length > 0) {
+                  return `${tooltipItems[0].label}일`;
+                }
+                return "";
+              },
+              label: function (context) {
+                const label = context.dataset.label || "";
+                const value = context.raw || 0;
+                return `${label}: ${value.toLocaleString()} 원`;
+              },
+            },
+          },
+        },
+        layout: { padding: { top: 30, bottom: 20, right: 50 } },
+      },
+      plugins: [axisLabelPlugin],
+    };
+
+    let paymentPieConfig = null;
+    if (activeTab === "all") {
+      const paymentMethodsCount = dataForPaymentPie.reduce((acc, curr) => {
+        acc[curr.paymentMethod] = (acc[curr.paymentMethod] || 0) + curr.amount;
+        return acc;
+      }, {});
+      paymentPieConfig = {
+        type: "pie",
+        data: {
+          labels: Object.keys(paymentMethodsCount),
+          datasets: [
+            {
+              label: "결제 수단",
+              data: Object.values(paymentMethodsCount),
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              displayColors: false,
+              callbacks: {
+                title: function (tooltipItems) {
+                  if (tooltipItems.length > 0) {
+                    const currentLabel = tooltipItems[0].label;
+                    if (currentLabel === "qr") return "QR 결제";
+                    if (currentLabel === "card") return "카드 결제";
+                    if (currentLabel === "cash") return "현금 결제";
+                    return currentLabel;
+                  }
+                  return "";
+                },
+                label: function (context) {
+                  const value = context.raw || 0;
+                  const total = context.chart.getDatasetMeta(0).total;
+                  const percentage =
+                    total > 0 ? ((value / total) * 100).toFixed(1) : 0;
+                  return [
+                    `금액 : ${value.toLocaleString()} 원`,
+                    `비율 : ${percentage}%`,
+                  ];
+                },
+              },
+            },
+          },
+          layout: { padding: 5 },
+          radius: "80%",
+        },
+      };
+    }
+
+    const restaurantSales = dataForRestaurantPie.reduce((acc, curr) => {
+      acc[curr.restaurant] = (acc[curr.restaurant] || 0) + curr.amount;
+      return acc;
+    }, {});
+
+    const restaurantPieConfig = {
+      type: "pie",
+      data: {
+        labels: Object.keys(restaurantSales),
+        datasets: [
+          {
+            label: "식당별",
+            data: Object.values(restaurantSales),
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            displayColors: false,
+            callbacks: {
+              label: function (context) {
+                const value = context.raw || 0;
+                const total = context.chart.getDatasetMeta(0).total;
+                const percentage =
+                  total > 0 ? ((value / total) * 100).toFixed(1) : 0;
+                return [
+                  `금액 : ${value.toLocaleString()} 원`,
+                  `비율 : ${percentage}%`,
+                ];
+              },
+            },
+          },
+        },
+        layout: { padding: 5 },
+        radius: "80%",
+      },
+    };
+
+    const itemsPerPage = 20;
+    const totalPages = Math.ceil(
+      lineChartAndTableDataSource.length / itemsPerPage
+    );
+    const paginatedData = lineChartAndTableDataSource.slice(
+      (currentPage - 1) * itemsPerPage,
+      currentPage * itemsPerPage
+    );
+
+    renderMealTicketTable(paginatedData, activeTab);
+
+    const paginationContainer = document.getElementById(
+      "mealTicketPaginationControls"
+    );
+    if (paginationContainer) {
+      paginationContainer.innerHTML = createPaginationControls(
+        totalPages,
+        currentPage,
+        "window.renderMealTicketPurchaseHistoryWithData",
+        activeTab,
+        restaurantFilter,
+        selectedMonth
+      );
+    }
+
+    renderCharts(lineConfig, paymentPieConfig, restaurantPieConfig);
+
+    const mainContent = document.getElementById("admin-content-container");
+    if (mainContent) {
+      setTimeout(() => {
+        mainContent.scrollTo({ top: 0, behavior: "smooth" });
+      }, 20);
+    }
+  };
+
+  window.renderCharts = function (
+    lineConfig,
+    paymentPieConfig,
+    restaurantPieConfig
+  ) {
+    if (window.dailySalesLineChart) window.dailySalesLineChart.destroy();
+    if (window.paymentMethodsPieChartInstance)
+      window.paymentMethodsPieChartInstance.destroy();
+    if (window.restaurantDistributionPieChartInstance)
+      window.restaurantDistributionPieChartInstance.destroy();
+
+    const lineCtx = document
+      .getElementById("dailySalesLineChartCanvas")
+      ?.getContext("2d");
+    const paymentPieCtx = document
+      .getElementById("paymentMethodsPieCanvas")
+      ?.getContext("2d");
+    const restaurantPieCtx = document
+      .getElementById("restaurantDistributionPieCanvas")
+      ?.getContext("2d");
+
+    if (lineCtx && lineConfig && lineConfig.data.labels.length > 0) {
+      window.dailySalesLineChart = new Chart(lineCtx, lineConfig);
+    }
+
+    const paymentLegendContainer = document.getElementById(
+      "paymentMethodsLegend"
+    );
+    if (paymentLegendContainer) paymentLegendContainer.innerHTML = "";
+    if (
+      paymentPieCtx &&
+      paymentPieConfig &&
+      paymentPieConfig.data.labels.length > 0
+    ) {
+      paymentPieConfig.data.datasets[0].backgroundColor =
+        paymentPieConfig.data.labels.map(
+          (label) => paymentMethodColors[label] || "rgba(201, 203, 207, 0.7)"
+        );
+      window.paymentMethodsPieChartInstance = new Chart(
+        paymentPieCtx,
+        paymentPieConfig
+      );
+      if (paymentLegendContainer) {
+        let legendHTML = "";
+        const legendOrder = ["qr", "card", "cash"];
+        legendOrder.forEach((label) => {
+          if (paymentPieConfig.data.labels.includes(label)) {
+            const color =
+              paymentMethodColors[label] || "rgba(201, 203, 207, 0.7)";
+            let displayLabelText = label;
+            if (label === "qr") displayLabelText = "QR 결제";
+            else if (label === "card") displayLabelText = "카드 결제";
+            else if (label === "cash") displayLabelText = "현금 결제";
+            legendHTML += `<div class="flex items-center"><span class="inline-block w-2.5 h-2.5 mr-1.5 rounded-sm" style="background-color: ${color};"></span>${displayLabelText}</div>`;
+          }
+        });
+        paymentLegendContainer.innerHTML = legendHTML;
+      }
+    }
+
+    const restaurantLegendContainer = document.getElementById(
+      "restaurantDistributionLegend"
+    );
+    if (restaurantLegendContainer) restaurantLegendContainer.innerHTML = "";
+    if (
+      restaurantPieCtx &&
+      restaurantPieConfig &&
+      restaurantPieConfig.data.labels.length > 0
+    ) {
+      const defaultColors = [
+        "rgba(54, 162, 235, 0.7)",
+        "rgba(255, 206, 86, 0.7)",
+        "rgba(255, 159, 64, 0.7)",
+      ];
+      let colorIdx = 0;
+      restaurantPieConfig.data.datasets[0].backgroundColor =
+        restaurantPieConfig.data.labels.map(
+          (label) =>
+            restaurantColors[label] ||
+            defaultColors[colorIdx++ % defaultColors.length]
+        );
+      window.restaurantDistributionPieChartInstance = new Chart(
+        restaurantPieCtx,
+        restaurantPieConfig
+      );
+      if (restaurantLegendContainer) {
+        let legendHTML = "";
+        let cIdx = 0;
+        restaurantPieConfig.data.labels.forEach((label) => {
+          const color =
+            restaurantColors[label] ||
+            defaultColors[cIdx++ % defaultColors.length];
+          legendHTML += `<div class="flex items-center"><span class="inline-block w-2.5 h-2.5 mr-1.5 rounded-sm" style="background-color: ${color};"></span>${label}</div>`;
+        });
+        restaurantLegendContainer.innerHTML = legendHTML;
+      }
+    }
+  };
+
+  window.renderMealTicketTable = function (data, activeTab) {
+    const tableBody = document.getElementById("mealTicketTableBody");
+    if (!tableBody) return;
+    let rowsHTML = "";
+    const tableConfig = getMealTicketTableConfig(activeTab);
+
+    if (data.length === 0) {
+      const colspan = tableConfig.columnOrder.length;
+      rowsHTML = `<tr><td colspan="${colspan}" class="text-center py-4">해당 조건의 내역이 없습니다.</td></tr>`;
+    } else {
+      rowsHTML = data
+        .map((p) => {
+          let r = `<tr class="border-b border-gray-200 hover:bg-gray-100">`;
+          const sB = `<span class="px-2 py-1 text-xs font-semibold rounded-full ${
+            p.status === "완료"
+              ? "bg-green-200 text-green-800"
+              : "bg-yellow-200 text-yellow-800"
+          }">${p.status}</span>`;
+
+          const formatCell = (val) =>
+            `<td class="py-2 px-4 text-center align-middle">${val}</td>`;
+          const formatAmount = (val) =>
+            `<td class="py-2 px-4 text-center align-middle">${val.toLocaleString()} 원</td>`;
+          const formatCenteredTruncateCell = (val) =>
+            `<td class="py-2 px-4 text-center align-middle truncate">${val}</td>`;
+
+          tableConfig.columnOrder.forEach((colName) => {
+            switch (colName) {
+              case "날짜":
+                r += formatCell(p.date);
+                break;
+              case "시간":
+                r += formatCell(p.time);
+                break;
+              case "식권 개수":
+                r += formatCell(p.ticketCount);
+                break;
+              case "결제 금액":
+                r += formatAmount(p.amount);
+                break;
+              case "결제방법":
+                let methodLabel = p.paymentMethod;
+                if (methodLabel === "qr") methodLabel = "QR";
+                else if (methodLabel === "card") methodLabel = "카드";
+                else if (methodLabel === "cash") methodLabel = "현금";
+                r += formatCell(methodLabel);
+                break;
+              case "식당":
+                r += formatCell(p.restaurant);
+                break;
+              case "학번/사번":
+                r += formatCenteredTruncateCell(p.userId || "-");
+                break;
+              case "이름":
+                r += formatCenteredTruncateCell(p.name || "-");
+                break;
+              case "카드번호":
+                let cardNumber = p.cardNumber || "-";
+                if (cardNumber !== "-") {
+                  const cleaned = cardNumber.toString().replace(/\D/g, "");
+                  if (cleaned.length === 16) {
+                    // 16자리 카드번호의 경우, 가운데를 '*'로 마스킹합니다. (예: 1234-****-****-5678)
+                    const firstFour = cleaned.substring(0, 4);
+                    const lastFour = cleaned.substring(12);
+                    cardNumber = `${firstFour}-****-****-${lastFour}`;
+                  } else {
+                    // 16자리가 아닌 경우, 기존 로직대로 4자리마다 하이픈을 추가합니다.
+                    cardNumber = cleaned.replace(/(\d{4})(?=\d)/g, "$1-");
+                  }
+                }
+                r += formatCenteredTruncateCell(cardNumber);
+                break;
+              case "처리상태":
+                r += formatCell(sB);
+                break;
+            }
+          });
+          r += `</tr>`;
+          return r;
+        })
+        .join("");
+    }
+    tableBody.innerHTML = rowsHTML;
+  };
+
+  window.onMealTabClick = async function (type) {
+    const initialMonth =
+      window.currentMealTicketMonth || new Date().toISOString().substring(0, 7);
+
+    // 탭 클릭 시 식당 필터는 '전체'로 초기화
+    window.renderMealTicketPurchaseHistoryWithData(
+      type,
+      "all",
+      initialMonth,
+      1,
+      window.allMealTicketPurchases
+    );
+  };
+
+  // [FIX] 뷰가 바뀔 때 캐시된 사용자 정보도 함께 초기화합니다.
+  window.cleanupCurrentView = function () {
+    if (window.dailySalesLineChart) {
+      window.dailySalesLineChart.destroy();
+      window.dailySalesLineChart = null;
+    }
+    if (window.paymentMethodsPieChartInstance) {
+      window.paymentMethodsPieChartInstance.destroy();
+      window.paymentMethodsPieChartInstance = null;
+    }
+    if (window.restaurantDistributionPieChartInstance) {
+      window.restaurantDistributionPieChartInstance.destroy();
+      window.restaurantDistributionPieChartInstance = null;
+    }
+    // 캐시를 비워 다음 뷰 로딩 시 새로 불러오도록 합니다.
+    __mealTicketViewUserCache = null;
+  };
+
+  if (window.allMealTicketPurchases) {
+    window.renderMealTicketPurchaseHistoryWithData(
+      "all",
+      "all",
+      window.currentMealTicketMonth || new Date().toISOString().substring(0, 7),
+      1,
+      window.allMealTicketPurchases
+    );
+  } else {
+    window.onMealTabClick("all");
+  }
+</script>

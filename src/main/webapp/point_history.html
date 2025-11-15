@@ -1,0 +1,289 @@
+<script>
+  // ===== 포인트 충전/사용 내역 관련 모든 함수 =====
+
+  /**
+   * 포인트 충전 내역 테이블과 필터를 렌더링합니다.
+   */
+  window.renderPointTransactionHistory = function (
+    filterType = "all",
+    transactions = [],
+    startDate = "",
+    endDate = "",
+    searchType = "name",
+    searchText = "",
+    currentPage = 1
+  ) {
+    const contentContainer = document.getElementById("admin-content-container");
+    if (!contentContainer) return;
+
+    // 필터링 로직
+    let filteredData = transactions.filter((t) => {
+      const typeMatch = filterType === "all" || t.type === filterType;
+      const startDateMatch = !startDate || t.date >= startDate;
+      const endDateMatch = !endDate || t.date <= endDate;
+
+      let searchMatch = true;
+      if (searchText) {
+        const targetField = searchType === "name" ? t.name : t.id.toString();
+        searchMatch = targetField
+          .toLowerCase()
+          .includes(searchText.toLowerCase());
+      }
+
+      return typeMatch && startDateMatch && endDateMatch && searchMatch;
+    });
+
+    const itemsPerPage = 30;
+    const totalPages = Math.ceil(filteredData.length / itemsPerPage);
+    const paginated = filteredData.slice(
+      (currentPage - 1) * itemsPerPage,
+      currentPage * itemsPerPage
+    );
+
+    // HTML 템플릿
+    contentContainer.innerHTML = `
+<div class="bg-white p-6 rounded-lg shadow">
+  <!-- 헤더 영역: 제목/탭(좌)과 필터(우)로 구성된 2단 레이아웃 -->
+  <div class="flex justify-between items-start mb-6 pb-4 border-b border-gray-200">
+      <!-- 왼쪽 컬럼: 제목과 탭 버튼 -->
+      <div class="flex flex-col">
+          <h2 class="text-2xl font-semibold text-gray-800 mb-4">포인트 충전 내역</h2>
+          <nav class="flex space-x-1" aria-label="Tabs">
+            <button class="tab-button ${
+              filterType === "all" ? "active" : ""
+            }" onclick="applyPointFilters('all')">전체</button>
+            <button class="tab-button ${
+              filterType === "charge" ? "active" : ""
+            }" onclick="applyPointFilters('charge')">충전</button>
+            <button class="tab-button ${
+              filterType === "refund" ? "active" : ""
+            }" onclick="applyPointFilters('refund')">환불</button>
+          </nav>
+      </div>
+
+      <!-- 오른쪽 컬럼: 검색 필터 박스 -->
+      <div class="inline-block bg-gray-50 p-4 rounded-lg border border-gray-200">
+        <div class="flex flex-wrap items-end gap-x-4 gap-y-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1.5">거래일</label>
+            <div class="flex items-center space-x-2">
+              <!-- [디자인 수정] input을 div로 감싸고 flex를 이용해 세로 중앙 정렬을 구현합니다. -->
+              <div class="flex items-center w-full h-8 px-3 text-sm bg-white border border-gray-300 rounded-md shadow-sm focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500">
+                <input type="date" id="point-start-date" value="${startDate}" class="w-full bg-transparent border-none focus:ring-0">
+              </div>
+              <span class="text-gray-500">~</span>
+              <div class="flex items-center w-full h-8 px-3 text-sm bg-white border border-gray-300 rounded-md shadow-sm focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500">
+                <input type="date" id="point-end-date" value="${endDate}" class="w-full bg-transparent border-none focus:ring-0">
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <label for="point-search-type" class="block text-sm font-medium text-gray-700 mb-1.5">검색 조건</label>
+            <div class="flex items-center space-x-2">
+              <!-- [디자인 수정] h-8 클래스를 추가하여 높이를 조정합니다. -->
+              <select id="point-search-type" class="block w-auto h-8 pl-3 pr-10 text-sm border border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+                <option value="name" ${
+                  searchType === "name" ? "selected" : ""
+                }>이름</option>
+                <option value="id" ${
+                  searchType === "id" ? "selected" : ""
+                }>학번/사번</option>
+              </select>
+              <input type="text" id="point-search-text" value="${searchText}" placeholder="입력" class="block w-48 h-8 px-3 text-sm border border-gray-300 border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+            </div>
+          </div>
+
+          <div class="flex space-x-2">
+            <button onclick="applyPointFilters()" class="w-24 h-8 flex items-center justify-center px-4 rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition duration-150 ease-in-out">검색</button>
+            <button onclick="resetPointFilters()" class="w-24 h-8 flex items-center justify-center px-4 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400 transition duration-150 ease-in-out">초기화</button>
+          </div>
+
+        </div>
+      </div>
+  </div>
+
+  <div class="overflow-x-auto">
+    <table class="min-w-full bg-white table-fixed">
+      <colgroup>
+        <col style="width: 12%;">
+        <col style="width: 10%;">
+        <col style="width: 15%;">
+        <col style="width: 15%;">
+        <col style="width: 15%;">
+        <col style="width: 10%;">
+        <col style="width: 13%;">
+      </colgroup>
+      <thead class="bg-gray-200">
+        <tr>
+          <th class="py-3 px-4 uppercase font-semibold text-sm text-gray-600 text-center">날짜</th>
+          <th class="py-3 px-4 uppercase font-semibold text-sm text-gray-600 text-center">시간</th>
+          <th class="py-3 px-4 uppercase font-semibold text-sm text-gray-600 text-center">이름</th>
+          <th class="py-3 px-4 uppercase font-semibold text-sm text-gray-600 text-center">학번/사번</th>
+          <th class="py-3 px-4 uppercase font-semibold text-sm text-gray-600 text-center">결제 금액</th>
+          <th class="py-3 px-4 uppercase font-semibold text-sm text-gray-600 text-center">결제 종류</th>
+          <th class="py-3 px-4 uppercase font-semibold text-sm text-gray-600 text-center">처리상태</th>
+        </tr>
+      </thead>
+      <tbody class="text-gray-700">
+        ${paginated
+          .map(
+            (t) => `
+        <tr class="border-b border-gray-200 hover:bg-gray-100">
+          <td class="py-2 px-4 text-center align-middle">${t.date}</td>
+          <td class="py-2 px-4 text-center align-middle">${t.time}</td>
+          <td class="py-2 px-4 text-center align-middle truncate">${t.name}</td>
+          <td class="py-2 px-4 text-center align-middle truncate">${t.id}</td>
+          <td class="py-2 px-4 text-center align-middle ${
+            t.type === "charge" ? "text-blue-600" : "text-red-600"
+          }">${t.amount.toLocaleString()} 원</td>
+          <td class="py-2 px-4 text-center align-middle">${
+            t.type === "charge" ? "충전" : "환불"
+          }</td>
+          <td class="py-2 px-4 text-center align-middle"><span class="px-2 py-1 text-xs font-semibold rounded-full ${
+            t.status === "완료"
+              ? "bg-green-200 text-green-800"
+              : "bg-yellow-200 text-yellow-800"
+          }">${t.status}</span></td>
+        </tr>`
+          )
+          .join("")}
+        ${
+          paginated.length === 0
+            ? '<tr><td colspan="7" class="text-center py-4">데이터가 없습니다.</td></tr>'
+            : ""
+        }
+      </tbody>
+    </table>
+  </div>
+  ${createPaginationControls(
+    totalPages,
+    currentPage,
+    "window.renderPointTransactionHistoryWithData",
+    filterType,
+    startDate,
+    endDate,
+    searchType,
+    searchText
+  )}
+</div>`;
+
+    const mainContent = document.getElementById("admin-content-container");
+    if (mainContent) {
+      mainContent.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  };
+
+  /**
+   * 데이터를 가지고 렌더링 함수를 호출하는 래퍼 함수입니다.
+   */
+  window.renderPointTransactionHistoryWithData = function (
+    filterType = "all",
+    startDate = "",
+    endDate = "",
+    searchType = "name",
+    searchText = "",
+    currentPage = 1
+  ) {
+    // 이 함수는 전역 데이터(window.currentPointTransactionData)를 렌더링 함수로 전달하는 역할을 합니다.
+    renderPointTransactionHistory(
+      filterType,
+      window.currentPointTransactionData || [],
+      startDate,
+      endDate,
+      searchType,
+      searchText,
+      currentPage
+    );
+  };
+
+  /**
+   * 필터링 버튼 클릭 또는 탭 변경 시 호출되는 함수입니다.
+   */
+  window.applyPointFilters = function (newFilterType) {
+    let currentFilterType = "all";
+
+    if (typeof newFilterType === "string") {
+      currentFilterType = newFilterType;
+    } else {
+      const activeButton = document.querySelector(
+        "#admin-content-container .tab-button.active"
+      );
+      if (activeButton) {
+        const text = activeButton.textContent;
+        if (text === "충전") currentFilterType = "charge";
+        else if (text === "환불") currentFilterType = "refund";
+        else currentFilterType = "all";
+      }
+    }
+
+    const startDate = document.getElementById("point-start-date")?.value || "";
+    const endDate = document.getElementById("point-end-date")?.value || "";
+    const searchType =
+      document.getElementById("point-search-type")?.value || "name";
+    const searchText =
+      document.getElementById("point-search-text")?.value || "";
+
+    // 필터 적용 시에는 캐시된 데이터를 사용해 다시 그립니다.
+    renderPointTransactionHistoryWithData(
+      currentFilterType,
+      startDate,
+      endDate,
+      searchType,
+      searchText,
+      1 // 필터 변경 시 항상 1페이지로 이동
+    );
+  };
+
+  /**
+   * 필터 초기화 함수입니다.
+   */
+  window.resetPointFilters = function () {
+    renderPointTransactionHistoryWithData("all", "", "", "name", "", 1);
+  };
+
+  // ===== VIEW INITIALIZATION & CLEANUP =====
+
+  /**
+   * 뷰가 다른 페이지로 전환될 때 호출되는 정리 함수입니다.
+   */
+  window.cleanupCurrentView = function () {
+    console.log("Cleaning up point history view data.");
+    window.currentPointTransactionData = []; // 데이터 캐시 제거
+  };
+
+  /**
+   * (IIFE) 이 뷰가 로드될 때 실행되는 비동기 초기화 함수입니다.
+   */
+  (async function initializePointHistoryView() {
+    const contentContainer = document.getElementById("admin-content-container");
+    if (!contentContainer) {
+      console.error("Content container not found for point history view.");
+      return;
+    }
+
+    contentContainer.innerHTML = `<div class="p-6 text-center text-gray-500"><p>포인트 충전 내역을 불러오는 중입니다...</p></div>`;
+
+    try {
+      if (typeof window.fetchPointTransactionData !== "function") {
+        throw new Error(
+          "데이터 로딩 함수(fetchPointTransactionData)를 찾을 수 없습니다. point_transactions.js 파일이 올바르게 로드되었는지 확인하세요."
+        );
+      }
+
+      const freshData = await window.fetchPointTransactionData();
+
+      window.currentPointTransactionData = freshData;
+
+      window.resetPointFilters();
+    } catch (error) {
+      console.error("포인트 내역 로딩 및 렌더링 실패:", error);
+      contentContainer.innerHTML = `
+        <div class="p-6 bg-red-100 text-red-700 rounded-lg shadow">
+          <strong class="font-bold">데이터 로딩 오류</strong>
+          <p class="mt-2">포인트 충전 내역을 불러오는 데 실패했습니다. 개발자 콘솔(F12)에서 자세한 오류를 확인하세요.</p>
+          <p class="mt-1 text-sm bg-red-200 p-2 rounded">오류 메시지: ${error.message}</p>
+        </div>`;
+    }
+  })();
+</script>

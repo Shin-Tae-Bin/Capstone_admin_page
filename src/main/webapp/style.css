@@ -1,0 +1,97 @@
+body {
+  font-family: "Inter", sans-serif;
+}
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e0; /* Tailwind gray-400 */
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #a0aec0; /* Tailwind gray-500 */
+}
+.tab-button {
+  padding: 0.5rem 1rem;
+  border-radius: 0.375rem; /* rounded-md */
+  border: 1px solid transparent;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+  cursor: pointer;
+}
+.tab-button.active {
+  background-color: #4299e1; /* bg-blue-500 */
+  color: white;
+  border-color: #4299e1; /* border-blue-500 */
+}
+.tab-button:not(.active):hover {
+  background-color: #ebf8ff; /* bg-blue-100 */
+  border-color: #90cdf4; /* border-blue-300 */
+}
+.filter-button {
+  padding: 0.5rem 1rem;
+  border-radius: 0.375rem; /* rounded-md */
+  border: 1px solid #d1d5db; /* border-gray-300 */
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+  cursor: pointer;
+}
+.filter-button.active {
+  background-color: #38a169; /* bg-green-600 */
+  color: white;
+  border-color: #38a169; /* border-green-600 */
+}
+.filter-button:not(.active):hover {
+  background-color: #f0fff4; /* bg-green-50 */
+  border-color: #68d391; /* border-green-400 */
+}
+.pagination-button {
+  padding: 0.5rem 1rem;
+  margin: 0 0.25rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.375rem;
+  background-color: white;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+.pagination-button:hover:not(:disabled):not(.active) {
+  background-color: #f9fafb; /* gray-50 */
+  color: #1f2937; /* gray-800 */
+}
+.pagination-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.pagination-button.active {
+  background-color: #3b82f6;
+  color: white;
+  border-color: #3b82f6;
+}
+/* Sidebar active style */
+.sidebar-item.active {
+  background-color: #eff6ff;
+  color: #2563eb;
+  font-weight: 600;
+}
+
+/* sidebar css */
+.sidebar-item {
+  display: block;
+  padding: 0.75rem 1.5rem;
+  color: #4a5568;
+  border-radius: 0.5rem;
+  transition: background-color 0.15s ease-in-out, color 0.15s ease-in-out;
+  text-align: center;
+}
+.sidebar-item:hover {
+  background-color: #e2e8f0;
+  color: #2d3748;
+}
+.sidebar-item.active {
+  background-color: #4299e1;
+  color: white;
+  font-weight: 600;
+}

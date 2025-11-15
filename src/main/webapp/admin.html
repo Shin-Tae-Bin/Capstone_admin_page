@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+   <title>관리자 페이지</title>
+    <link rel="icon" href="./images/KBU_LOGO.png" type="image/x-icon" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body class="bg-gray-100 overflow-hidden">
+    <div id="admin-header-container"></div>
+
+    <div class="flex h-[calc(100vh-72px)]">
+      <div
+        id="admin-sidebar-container"
+        class="w-64 bg-white shadow-lg overflow-y-auto mt-6 ml-2 rounded-lg h-[calc(100%-1.5rem)]"
+      ></div>
+      <main
+        id="admin-content-container"
+        class="flex-1 p-6 overflow-y-auto"
+      ></main>
+    </div>
+
+    <script src="point_transactions.js"></script>
+    <script src="payment.js"></script>
+    
+    <script src="admin.js?v=2"></script>
+  </body>
+</html>

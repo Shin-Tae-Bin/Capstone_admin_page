@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin Sidebar</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body class="bg-white h-full">
+    <div class="p-4">
+      <h1 class="text-2xl font-bold mt-4 mb-4 text-center">관리자 페이지</h1>
+
+      <nav class="p-4">
+        <ul>
+          <li>
+            <a href="#" id="nav-point-history" class="sidebar-item active"
+              >포인트 충전 내역</a
+            >
+          </li>
+          <li class="mt-2">
+            <a href="#" id="nav-meal-ticket-history" class="sidebar-item"
+              >식권 결제 내역</a
+            >
+          </li>
+        </ul>
+      </nav>
+    </div>
+
+    <style>
+      .sidebar-item {
+        /* transition 속성은 padding, margin 등 다른 속성에도 영향을 줄 수 있으므로 */
+        /* 세부적으로 지정하거나, padding 값을 동일하게 맞추는 것이 좋습니다. */
+        transition: all 0.3s ease;
+        padding: 0.75rem 1rem; /* p-3 px-4 와 유사한 값 */
+        border-radius: 0.375rem; /* rounded-md */
+        display: block;
+      }
+
+      .sidebar-item:hover {
+        background-color: #f3f4f6; /* gray-100 */
+      }
+
+      .sidebar-item.active {
+        background-color: #e5e7eb; /* gray-200 */
+        color: #1f2937; /* gray-800 */
+        font-weight: 500;
+      }
+    </style>
+  </body>
+</html>
