@@ -28,7 +28,7 @@ public class LoginServlet extends HttpServlet {
     private static final long serialVersionUID = 1L;
 
     // JWT 키
-    private static final String JWT_SECRET_KEY = "JWT_secret_key_must_be_longer_than_32_bytes_very_secure!!";
+    private static final String JWT_SECRET_KEY = "";
 
     private class LoginRequest {
         String username;
