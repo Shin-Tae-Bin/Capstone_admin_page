@@ -22,7 +22,7 @@ public class AuthFilter extends HttpFilter implements Filter {
     private static final long serialVersionUID = 1L;
 
     // LoginServlet과 동일한 키 사용
-    private static final String JWT_SECRET_KEY = "JWT_secret_key_must_be_longer_than_32_bytes_very_secure!!";
+    private static final String JWT_SECRET_KEY = "";
 
     @Override
     public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain) throws IOException, ServletException {
