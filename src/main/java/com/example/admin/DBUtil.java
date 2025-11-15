@@ -9,9 +9,9 @@ public class DBUtil {
 
     private static final String DB_HOST = "localhost";
     private static final String DB_PORT = "3306";
-    private static final String DB_NAME = "myapp";
-    private static final String DB_USER = "kbu"; 
-    private static final String DB_PASSWORD = "qhdks12!@"; 
+    private static final String DB_NAME = "";
+    private static final String DB_USER = ""; 
+    private static final String DB_PASSWORD = ""; 
 
     // 접속 주소 자동 생성
     private static final String DB_URL = "jdbc:mysql://" + DB_HOST + ":" + DB_PORT + "/" + DB_NAME;
